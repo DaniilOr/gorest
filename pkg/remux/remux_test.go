@@ -74,7 +74,7 @@ func TestReMUX_SetNotFoundHandler(t *testing.T) {
 	}{
 		{name: "GET", args: args{method: GET, path: "/get"}, want: http.StatusNotFound},
 		{name: "POST", args: args{method: POST, path: "/post"}, want: http.StatusNotFound},
-		{name: "PUT", args: args{method: PUT, path: "/put/poi"}, want: http.StatusInternalServerError},
+		{name: "PUT", args: args{method: PUT, path: "/put/putty"}, want: http.StatusNotFound},
 	}
 
 	for _, tt := range tests {
