@@ -9,12 +9,14 @@ import (
 	"strings"
 	"sync"
 )
+
 type Method string
-type ReMUX struct{
-	mu				 sync.RWMutex
-	plain 			map[Method]map[string] http.Handler
-	regex 			map[Method]map[*regexp.Regexp]http.Handler
+type ReMUX struct {
+	mu              sync.RWMutex
+	plain           map[Method]map[string]http.Handler
+	regex           map[Method]map[*regexp.Regexp]http.Handler
 	notFoundHandler http.Handler
+	allowedMethods  map[Method]bool
 }
 
 type contextKey struct {
@@ -25,6 +27,7 @@ type Params struct {
 	Named      map[string]string
 	Positional []string
 }
+
 const (
 	GET     Method = "GET"
 	POST    Method = "POST"
@@ -34,8 +37,9 @@ const (
 	OPTIONS Method = "OPTIONS"
 	HEAD    Method = "HEAD"
 )
+
 var paramsContextKey = &contextKey{"ReMUX context"}
-var defaultNotFound = func(w http.ResponseWriter, r *http.Request){
+var defaultNotFound = func(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 }
 var (
@@ -45,16 +49,19 @@ var (
 	ErrAmbiguousMapping = errors.New("ambiguous mapping")
 	ErrNoParams         = errors.New("no params")
 )
-func (c*contextKey) ToString() string{
+
+func (c *contextKey) ToString() string {
 	return c.name
 }
-func CreateNewReMUX()*ReMUX{
+func CreateNewReMUX() *ReMUX {
+
 	return &ReMUX{
-		notFoundHandler:http.HandlerFunc(defaultNotFound),
+		notFoundHandler: http.HandlerFunc(defaultNotFound),
+		allowedMethods:  map[Method]bool{GET: true, POST: true, PUT: true, PATCH: true, DELETE: true, OPTIONS: true, HEAD: true},
 	}
 }
-func (r*ReMUX) NewPlain(method Method, path string, handler http.Handler, middlewares ...middleware.Middleware) error{
-	if !isValidMethod(method) {
+func (r *ReMUX) NewPlain(method Method, path string, handler http.Handler, middlewares ...middleware.Middleware) error {
+	if !r.isValidMethod(method) {
 		return ErrInvalidMethod
 	}
 
@@ -69,7 +76,7 @@ func (r*ReMUX) NewPlain(method Method, path string, handler http.Handler, middle
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	_, ok := r.plain[method][path]
-	if ok{
+	if ok {
 		return ErrAmbiguousMapping
 	}
 	if r.plain == nil {
@@ -81,27 +88,27 @@ func (r*ReMUX) NewPlain(method Method, path string, handler http.Handler, middle
 	r.plain[method][path] = handler
 	return nil
 }
-func (r*ReMUX) NewRegex(method Method, handler http.Handler, path *regexp.Regexp, 	middlewares ...middleware.Middleware) error{
-	if !isValidMethod(method){
+func (r *ReMUX) NewRegex(method Method, handler http.Handler, path *regexp.Regexp, middlewares ...middleware.Middleware) error {
+	if !r.isValidMethod(method) {
 		return ErrInvalidMethod
 	}
-	if handler == nil{
+	if handler == nil {
 		return ErrNilHandler
 	}
 	if !strings.HasPrefix(path.String(), `^/`) {
 		return ErrInvalidPath
 	}
-	if !strings.HasSuffix(path.String(), `$`){
+	if !strings.HasSuffix(path.String(), `$`) {
 		return ErrInvalidPath
 	}
 	handler = wrapHandler(handler, middlewares...)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	_, ok := r.regex[method][path]
-	if ok{
+	if ok {
 		return ErrAmbiguousMapping
 	}
-	if r.regex == nil{
+	if r.regex == nil {
 		r.regex = make(map[Method]map[*regexp.Regexp]http.Handler)
 	}
 	if r.regex[method] == nil {
@@ -120,25 +127,25 @@ func (r *ReMUX) SetNotFoundHandler(handler http.Handler) error {
 	r.mu.Unlock()
 	return nil
 }
-func (r*ReMUX) ServeHTTP(w http.ResponseWriter, req *http.Request){
+func (r *ReMUX) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.mu.RLock()
 	var resultHandler http.Handler
-	if handlers, exist := r.plain[Method(req.Method)]; exist{
-		if handler, ok := handlers[req.URL.Path]; ok{
+	if handlers, exist := r.plain[Method(req.Method)]; exist {
+		if handler, ok := handlers[req.URL.Path]; ok {
 			resultHandler = handler
 		}
 	}
 
-	if resultHandler == nil{
-		if handlers, exist := r.regex[Method(req.Method)]; exist{
-			for path, handler := range handlers{
-				if matches := path.FindStringSubmatch(req.URL.Path); matches != nil{
+	if resultHandler == nil {
+		if handlers, exist := r.regex[Method(req.Method)]; exist {
+			for path, handler := range handlers {
+				if matches := path.FindStringSubmatch(req.URL.Path); matches != nil {
 					params := &Params{
-						make(map[string]string),
-						matches[1:], // FindStringSubmatch в 0 индексе хранит всю строку
+						Named:      make(map[string]string),
+						Positional: matches[1:], // FindStringSubmatch в 0 индексе хранит всю строку
 					}
-					for index, name := range path.SubexpNames(){
-						if name == ""{
+					for index, name := range path.SubexpNames() {
+						if name == "" {
 							continue
 						}
 						params.Named[name] = matches[index]
@@ -159,9 +166,9 @@ func (r*ReMUX) ServeHTTP(w http.ResponseWriter, req *http.Request){
 	resultHandler.ServeHTTP(w, req)
 }
 
-func isValidMethod(method Method) bool{
-	allowedMethods := map[Method]bool{GET:true, POST:true, PUT:true, PATCH:true, DELETE:true, OPTIONS:true, HEAD:true}
-	_, ok := allowedMethods[method]
+func (r *ReMUX) isValidMethod(method Method) bool {
+
+	_, ok := r.allowedMethods[method]
 	return ok
 }
 

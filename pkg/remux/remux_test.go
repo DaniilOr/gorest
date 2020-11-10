@@ -40,7 +40,7 @@ func TestReMUX_NewPlain(t *testing.T) {
 	}{
 		{name: "GET", args: args{method: GET, path: "/get"}, want: []byte(GET)},
 		{name: "POST", args: args{method: POST, path: "/post"}, want: []byte(POST)},
-		{name:"PUT", args: args{method: PUT, path: "/put"}, want: []byte(PUT)},
+		{name: "PUT", args: args{method: PUT, path: "/put"}, want: []byte(PUT)},
 	}
 
 	for _, tt := range tests {
@@ -151,7 +151,7 @@ func TestReMux_Regex(t *testing.T) {
 			t.Error(err)
 		}
 		writer.Write([]byte(params.Named["subresourceId"]))
-	}),postRegex, ); err != nil {
+	}), postRegex); err != nil {
 		t.Fatal(err)
 	}
 	if err := mux.NewRegex(PUT, http.HandlerFunc(
